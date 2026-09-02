@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Word Trainer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="wordScreen">
+      <div id="picture">💧</div>
+      <div id="word">water</div>
+      <button id="hearBtn">🔊 Hear the word</button>
+      <button id="micBtn">🎤 Your turn</button>
+      <div id="status"></div>
+      <div id="navRow">
+        <button id="prevBtn">⬅️ Prev word</button>
+        <button id="nextWordBtn">Next word ➡️</button>
+      </div>
+    </div>
+
+    <div id="rewardScreen" class="hidden">
+      <div id="rewardVideoWrap"></div>
+      <button id="againBtn">Again!</button>
+    </div>
+  </div>
+
+  <div id="setup">
+    <label>Word list (word,emoji per line):</label>
+    <textarea id="wordListInput" rows="20">water,💧
+cup,🥤
+ball,⚽
+more,➕
+help,🆘
+stop,✋
+go,🚗
+eat,🍽️
+milk,🥛
+juice,🧃
+dog,🐶
+cat,🐱
+up,⬆️
+down,⬇️
+in,📥
+out,📤
+hot,🔥
+cold,❄️
+on,🔛
+off,⭕
+big,🐘
+small,🐭
+mom,👩
+dad,👨
+book,📖
+bath,🛁
+bed,🛏️
+shoe,👟
+sock,🧦
+play,🎲
+done,✅
+yes,👍
+no,👎
+mine,🙋
+give,🤲
+push,👉
+pull,👈
+open,📂
+close,📁
+run,🏃
+jump,🤸
+sit,🪑
+</textarea>
+    <button id="applyWords">Apply</button>
+
+    <label>Reward YouTube URL:</label>
+    <input id="youtubeUrlInput" type="text" placeholder="https://www.youtube.com/watch?v=..." value="https://www.youtube.com/watch?v=8jmK6C3Q6ys">
+    <button id="applyVideo">Apply</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

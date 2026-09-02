@@ -1,0 +1,60 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, sans-serif;
+  background: #eaf6ff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+#app {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 0;
+}
+#app { text-align: center; }
+.hidden { display: none; }
+
+#picture { font-size: 12rem; }
+#word { font-size: 3rem; font-weight: bold; margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 0.1em; }
+
+button {
+  font-size: 1.5rem;
+  padding: 1rem 2rem;
+  margin: 0.5rem;
+  border-radius: 1rem;
+  border: none;
+  background: #4aa3ff;
+  color: white;
+  cursor: pointer;
+}
+button:active { transform: scale(0.96); }
+#micBtn.listening { background: #ff5a5a; }
+
+#status { margin-top: 1rem; font-size: 1.5rem; min-height: 2rem; }
+
+#navRow button {
+  font-size: 1rem;
+  padding: 0.5rem 1rem;
+  background: #9bb8cc;
+}
+
+#rewardVideoWrap iframe {
+  width: 90vw;
+  max-width: 640px;
+  height: 50vw;
+  max-height: 360px;
+  border-radius: 1rem;
+  border: none;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+#setup {
+  background: white;
+  padding: 1rem;
+  font-size: 0.8rem;
+  border-top: 1px solid #ccc;
+}
+#wordListInput { width: 100%; font-family: monospace; }

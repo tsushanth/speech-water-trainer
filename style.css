@@ -32,8 +32,16 @@ button {
 }
 button:active { transform: scale(0.96); }
 #micBtn.listening { background: #ff5a5a; }
+.secondaryBtn { background: #5f7f95; }
 
-#status { margin-top: 1rem; font-size: 1.5rem; min-height: 2rem; }
+#status {
+  margin: 1rem auto 0;
+  font-size: 1.5rem;
+  line-height: 1.35;
+  min-height: 2rem;
+  max-width: 42rem;
+  padding: 0 1rem;
+}
 
 #navRow button {
   font-size: 1rem;

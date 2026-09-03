@@ -10,12 +10,14 @@ const wordScreen = document.getElementById('wordScreen');
 const rewardScreen = document.getElementById('rewardScreen');
 const rewardVideoWrap = document.getElementById('rewardVideoWrap');
 const againBtn = document.getElementById('againBtn');
+const rewardNowBtn = document.getElementById('rewardNowBtn');
 const wordListInput = document.getElementById('wordListInput');
 const applyWordsBtn = document.getElementById('applyWords');
 const youtubeUrlInput = document.getElementById('youtubeUrlInput');
 const applyVideoBtn = document.getElementById('applyVideo');
 
 let youtubeVideoId = '';
+let canUseSpeechRecognition = false;
 
 function extractYouTubeId(url) {
   const patterns = [
@@ -60,9 +62,15 @@ function parseWordList(text) {
 
 function loadWord(i) {
   const w = words[i];
+  if (!w) {
+    wordEl.textContent = 'NO WORDS';
+    pictureEl.textContent = '❓';
+    statusEl.textContent = 'Add at least one word below, then tap Apply.';
+    return;
+  }
   wordEl.textContent = w.word;
   pictureEl.textContent = w.emoji;
-  statusEl.textContent = '';
+  statusEl.textContent = canUseSpeechRecognition ? '' : 'Speech recognition not supported — use Chrome, or use Reward manually.';
 }
 
 function speakWord(word) {
@@ -71,7 +79,14 @@ function speakWord(word) {
   speechSynthesis.speak(utter);
 }
 
-hearBtn.addEventListener('click', () => speakWord(words[currentIndex].word));
+hearBtn.addEventListener('click', () => {
+  const current = words[currentIndex];
+  if (current) {
+    speakWord(current.word);
+  } else {
+    statusEl.textContent = 'Add at least one word below, then tap Apply.';
+  }
+});
 
 // Levenshtein distance for lenient matching against unclear speech
 function levenshtein(a, b) {
@@ -102,15 +117,38 @@ function isCloseEnough(said, target) {
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null;
 let listening = false;
+canUseSpeechRecognition = Boolean(SpeechRecognition);
 
-if (SpeechRecognition) {
-  recognition = new SpeechRecognition();
-  recognition.lang = 'en-US';
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 5;
+function stopListening() {
+  listening = false;
+  micBtn.classList.remove('listening');
+}
 
-  recognition.addEventListener('result', (event) => {
-    const target = words[currentIndex].word;
+function speechErrorMessage(error) {
+  const messages = {
+    'network': 'Mic error: network. Chrome sends speech recognition to a Google service; reload Chrome and retry, then check VPN/privacy extensions and microphone permission for localhost.',
+    'not-allowed': 'Mic blocked. Allow microphone access for localhost in Chrome settings, then reload.',
+    'service-not-allowed': 'Speech service blocked. Check Chrome speech/microphone permissions, VPN, and privacy extensions, then reload.',
+    'audio-capture': 'No microphone found. Check the Mac input device and Chrome microphone permission.',
+    'no-speech': 'Did not hear speech. Try again close to the mic.',
+    'aborted': 'Listening stopped. Try again.'
+  };
+  return messages[error] || `Mic error: ${error}`;
+}
+
+function createRecognition() {
+  const nextRecognition = new SpeechRecognition();
+  nextRecognition.lang = 'en-US';
+  nextRecognition.interimResults = false;
+  nextRecognition.maxAlternatives = 5;
+
+  nextRecognition.addEventListener('result', (event) => {
+    const current = words[currentIndex];
+    if (!current) {
+      statusEl.textContent = 'Add at least one word below, then tap Apply.';
+      return;
+    }
+    const target = current.word;
     const alternatives = Array.from(event.results[0]).map(r => r.transcript);
     const matched = alternatives.some(alt => isCloseEnough(alt, target));
 
@@ -121,27 +159,34 @@ if (SpeechRecognition) {
     }
   });
 
-  recognition.addEventListener('end', () => {
-    listening = false;
-    micBtn.classList.remove('listening');
+  nextRecognition.addEventListener('end', stopListening);
+
+  nextRecognition.addEventListener('error', (e) => {
+    statusEl.textContent = speechErrorMessage(e.error);
+    stopListening();
   });
 
-  recognition.addEventListener('error', (e) => {
-    statusEl.textContent = 'Mic error: ' + e.error;
-    listening = false;
-    micBtn.classList.remove('listening');
-  });
+  return nextRecognition;
+}
+
+if (SpeechRecognition) {
+  recognition = createRecognition();
 } else {
-  statusEl.textContent = 'Speech recognition not supported — use Chrome.';
   micBtn.disabled = true;
 }
 
 micBtn.addEventListener('click', () => {
-  if (!recognition || listening) return;
+  if (!SpeechRecognition || listening) return;
+  recognition = createRecognition();
   listening = true;
   micBtn.classList.add('listening');
   statusEl.textContent = 'Listening...';
-  recognition.start();
+  try {
+    recognition.start();
+  } catch (e) {
+    statusEl.textContent = 'Could not start listening. Reload Chrome and try again.';
+    stopListening();
+  }
 });
 
 function showReward() {
@@ -159,6 +204,7 @@ function showReward() {
 }
 
 function nextWord() {
+  if (!words.length) return;
   currentIndex = (currentIndex + 1) % words.length;
   loadWord(currentIndex);
   rewardScreen.classList.add('hidden');
@@ -167,11 +213,13 @@ function nextWord() {
 }
 
 function prevWord() {
+  if (!words.length) return;
   currentIndex = (currentIndex - 1 + words.length) % words.length;
   loadWord(currentIndex);
 }
 
 againBtn.addEventListener('click', nextWord);
+rewardNowBtn.addEventListener('click', showReward);
 document.getElementById('nextWordBtn').addEventListener('click', nextWord);
 document.getElementById('prevBtn').addEventListener('click', prevWord);
 

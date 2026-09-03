@@ -21,6 +21,8 @@ enough to the target word.
 
 - Tap "Hear the word" to have it spoken aloud.
 - Tap "Your turn" and have him attempt the word into the mic.
+- Tap "Reward" when an adult wants to reinforce the attempt manually, or when
+  Chrome speech recognition is unavailable/flaky.
 - Matching is lenient (edit-distance based), not exact — partial/approximate
   attempts can pass. If it's too strict or too loose for him, adjust the
   `threshold` logic in `app.js` (`isCloseEnough`).
@@ -35,3 +37,6 @@ enough to the target word.
 - Requires Chrome + internet connection (Chrome's speech recognition is cloud-based
   even though the rest of the app is local; the reward video is also fetched from
   YouTube, so it's not usable fully offline).
+- `Mic error: network` usually means Chrome could not reach its speech service,
+  even if the rest of the internet works. Reload Chrome and retry, then check
+  VPN/privacy extensions and `chrome://settings/content/microphone` for localhost.

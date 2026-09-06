@@ -1,6 +1,62 @@
 let words = [];
 let currentIndex = 0;
 
+// ---------------------------------------------------------------------
+// Familiar-voice recording (parent-recorded clip per word), stored in
+// localStorage as base64 data URLs — same pattern as any locally-stored
+// image/blob in this app. No backend, no API cost.
+//
+// We deliberately do NOT do real-time AI voice cloning here: that needs a
+// server (to run the cloning/TTS model) and per-call API cost, which
+// breaks this app's "standalone static page, zero backend" requirement.
+// A single pre-recorded clip per word, played back verbatim, gets the
+// "familiar voice" engagement benefit without any of that.
+// ---------------------------------------------------------------------
+
+const VOICE_CLIPS_KEY = 'voiceClips';
+
+function loadVoiceClips() {
+  try {
+    const raw = localStorage.getItem(VOICE_CLIPS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveVoiceClips(clips) {
+  localStorage.setItem(VOICE_CLIPS_KEY, JSON.stringify(clips));
+}
+
+function clipKeyFor(word) {
+  return (word || '').trim().toLowerCase();
+}
+
+function getVoiceClip(clips, word) {
+  return clips[clipKeyFor(word)] || null;
+}
+
+function setVoiceClip(clips, word, dataUrl) {
+  const next = { ...clips };
+  next[clipKeyFor(word)] = dataUrl;
+  return next;
+}
+
+function clearVoiceClip(clips, word) {
+  const next = { ...clips };
+  delete next[clipKeyFor(word)];
+  return next;
+}
+
+// Decide how to play a word: use the stored clip if present, else fall
+// back to speech synthesis. Pure/testable — no DOM or audio APIs inside.
+function resolvePlaybackSource(clips, word) {
+  const clip = getVoiceClip(clips, word);
+  return clip ? { type: 'clip', dataUrl: clip } : { type: 'tts', word };
+}
+
+let voiceClips = loadVoiceClips();
+
 const pictureEl = document.getElementById('picture');
 const wordEl = document.getElementById('word');
 const hearBtn = document.getElementById('hearBtn');
@@ -15,6 +71,9 @@ const wordListInput = document.getElementById('wordListInput');
 const applyWordsBtn = document.getElementById('applyWords');
 const youtubeUrlInput = document.getElementById('youtubeUrlInput');
 const applyVideoBtn = document.getElementById('applyVideo');
+const recordBtn = document.getElementById('recordBtn');
+const clearClipBtn = document.getElementById('clearClipBtn');
+const voiceClipStatusEl = document.getElementById('voiceClipStatus');
 
 let youtubeVideoId = '';
 let canUseSpeechRecognition = false;
@@ -71,9 +130,40 @@ function loadWord(i) {
   wordEl.textContent = w.word;
   pictureEl.textContent = w.emoji;
   statusEl.textContent = canUseSpeechRecognition ? '' : 'Speech recognition not supported — use Chrome, or use Reward manually.';
+  refreshVoiceClipUi();
 }
 
+function refreshVoiceClipUi() {
+  const w = words[currentIndex];
+  if (!w) {
+    voiceClipStatusEl.textContent = '';
+    clearClipBtn.classList.add('hidden');
+    return;
+  }
+  const hasClip = Boolean(getVoiceClip(voiceClips, w.word));
+  voiceClipStatusEl.textContent = hasClip ? 'Using recorded voice for this word.' : 'Using computer voice for this word.';
+  clearClipBtn.classList.toggle('hidden', !hasClip);
+  recordBtn.textContent = hasClip ? '🎙️ Re-record my voice' : '🎙️ Record my voice';
+}
+
+let currentClipAudio = null;
+
 function speakWord(word) {
+  const source = resolvePlaybackSource(voiceClips, word);
+  if (source.type === 'clip') {
+    if (currentClipAudio) {
+      currentClipAudio.pause();
+    }
+    currentClipAudio = new Audio(source.dataUrl);
+    currentClipAudio.play().catch(() => {
+      // Autoplay/decoding failed for some reason — fall back to TTS so
+      // the app still works.
+      const utter = new SpeechSynthesisUtterance(word);
+      utter.rate = 0.7;
+      speechSynthesis.speak(utter);
+    });
+    return;
+  }
   const utter = new SpeechSynthesisUtterance(word);
   utter.rate = 0.7;
   speechSynthesis.speak(utter);
@@ -227,6 +317,86 @@ applyWordsBtn.addEventListener('click', () => {
   words = parseWordList(wordListInput.value);
   currentIndex = 0;
   loadWord(0);
+});
+
+// ---------------------------------------------------------------------
+// Recording UI: hold to record isn't needed here — click to start,
+// click again to stop (simpler for a parent to operate one-handed).
+// ---------------------------------------------------------------------
+
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function startRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+    statusEl.textContent = 'Recording is not supported in this browser.';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.addEventListener('dataavailable', (e) => {
+      if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+    });
+    mediaRecorder.addEventListener('stop', async () => {
+      stream.getTracks().forEach(track => track.stop());
+      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      const dataUrl = await blobToDataUrl(blob);
+      const current = words[currentIndex];
+      if (current) {
+        voiceClips = setVoiceClip(voiceClips, current.word, dataUrl);
+        saveVoiceClips(voiceClips);
+        refreshVoiceClipUi();
+        statusEl.textContent = 'Saved your recording for this word.';
+      }
+    });
+    mediaRecorder.start();
+    isRecording = true;
+    recordBtn.textContent = '⏹️ Stop recording';
+    statusEl.textContent = 'Recording... say the word, then tap Stop.';
+  } catch (e) {
+    statusEl.textContent = 'Could not access the microphone. Check browser permissions.';
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && isRecording) {
+    mediaRecorder.stop();
+  }
+  isRecording = false;
+}
+
+recordBtn.addEventListener('click', () => {
+  const current = words[currentIndex];
+  if (!current) {
+    statusEl.textContent = 'Add at least one word below, then tap Apply.';
+    return;
+  }
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
+
+clearClipBtn.addEventListener('click', () => {
+  const current = words[currentIndex];
+  if (!current) return;
+  voiceClips = clearVoiceClip(voiceClips, current.word);
+  saveVoiceClips(voiceClips);
+  refreshVoiceClipUi();
+  statusEl.textContent = 'Cleared the recorded clip for this word.';
 });
 
 // init

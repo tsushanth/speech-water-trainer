@@ -57,6 +57,111 @@ function resolvePlaybackSource(clips, word) {
 
 let voiceClips = loadVoiceClips();
 
+// ---- Practice logging (local-only, never sent anywhere) ----
+const PRACTICE_LOG_KEY = 'practiceLog';
+const MAX_LOG_ENTRIES = 5000; // cap growth of localStorage over long-term use
+
+function loadPracticeLog() {
+  try {
+    const raw = localStorage.getItem(PRACTICE_LOG_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function logPracticeAttempt({ word, matched, mode, recognitionAttempted }) {
+  const log = loadPracticeLog();
+  log.push({
+    word,
+    ts: Date.now(),
+    matched: Boolean(matched),
+    mode, // 'mic' or 'manual'
+    recognitionAttempted: Boolean(recognitionAttempted)
+  });
+  if (log.length > MAX_LOG_ENTRIES) {
+    log.splice(0, log.length - MAX_LOG_ENTRIES);
+  }
+  localStorage.setItem(PRACTICE_LOG_KEY, JSON.stringify(log));
+}
+
+function computeProgressStats(log) {
+  const total = log.length;
+  const counts = {};
+  for (const entry of log) {
+    counts[entry.word] = (counts[entry.word] || 0) + 1;
+  }
+  const mostPracticed = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  const recognized = log.filter(e => e.recognitionAttempted);
+  const matchedCount = recognized.filter(e => e.matched).length;
+  const overallRate = recognized.length ? matchedCount / recognized.length : null;
+
+  const now = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const recent = recognized.filter(e => now - e.ts <= sevenDaysMs);
+  const older = recognized.filter(e => now - e.ts > sevenDaysMs);
+  const rateOf = (arr) => arr.length ? arr.filter(e => e.matched).length / arr.length : null;
+
+  return {
+    total,
+    mostPracticed,
+    recognizedTotal: recognized.length,
+    matchedCount,
+    overallRate,
+    recentRate: rateOf(recent),
+    recentCount: recent.length,
+    olderRate: rateOf(older),
+    olderCount: older.length
+  };
+}
+
+function renderProgress() {
+  const log = loadPracticeLog();
+  const stats = computeProgressStats(log);
+  const pct = (r) => r === null ? 'n/a' : `${Math.round(r * 100)}%`;
+
+  if (stats.total === 0) {
+    progressContent.innerHTML = '<p>No practice sessions recorded yet. Come back after a few tries!</p>';
+    return;
+  }
+
+  let html = '';
+  html += `<p><strong>${stats.total}</strong> total practice attempts logged.</p>`;
+
+  if (stats.mostPracticed.length) {
+    html += '<h2>Most practiced words</h2><ul>';
+    for (const [word, count] of stats.mostPracticed) {
+      html += `<li>${word} — ${count} time${count === 1 ? '' : 's'}</li>`;
+    }
+    html += '</ul>';
+  }
+
+  html += '<h2>Match success rate</h2>';
+  if (stats.recognizedTotal > 0) {
+    html += `<p>${pct(stats.overallRate)} of ${stats.recognizedTotal} listened attempts matched the target word.</p>`;
+  } else {
+    html += '<p>No mic attempts recorded yet (only manual rewards so far).</p>';
+  }
+
+  html += '<h2>Recent trend</h2>';
+  if (stats.recentCount > 0 && stats.olderCount > 0) {
+    html += `<p>Last 7 days: ${pct(stats.recentRate)} match rate (${stats.recentCount} tries).<br>`;
+    html += `Before that: ${pct(stats.olderRate)} match rate (${stats.olderCount} tries).</p>`;
+  } else if (stats.recentCount > 0) {
+    html += `<p>Last 7 days: ${pct(stats.recentRate)} match rate (${stats.recentCount} tries). Not enough older history yet to compare.</p>`;
+  } else if (stats.olderCount > 0) {
+    html += `<p>No mic attempts in the last 7 days. Earlier match rate was ${pct(stats.olderRate)} (${stats.olderCount} tries).</p>`;
+  } else {
+    html += '<p>Not enough mic attempts yet to show a trend.</p>';
+  }
+
+  progressContent.innerHTML = html;
+}
+
 const pictureEl = document.getElementById('picture');
 const wordEl = document.getElementById('word');
 const hearBtn = document.getElementById('hearBtn');
@@ -67,6 +172,10 @@ const rewardScreen = document.getElementById('rewardScreen');
 const rewardVideoWrap = document.getElementById('rewardVideoWrap');
 const againBtn = document.getElementById('againBtn');
 const rewardNowBtn = document.getElementById('rewardNowBtn');
+const progressBtn = document.getElementById('progressBtn');
+const closeProgressBtn = document.getElementById('closeProgressBtn');
+const progressScreen = document.getElementById('progressScreen');
+const progressContent = document.getElementById('progressContent');
 const wordListInput = document.getElementById('wordListInput');
 const applyWordsBtn = document.getElementById('applyWords');
 const youtubeUrlInput = document.getElementById('youtubeUrlInput');
@@ -295,6 +404,8 @@ function createRecognition() {
     const alternatives = Array.from(event.results[0]).map(r => r.transcript);
     const matched = alternatives.some(alt => isCloseEnough(alt, target));
 
+    logPracticeAttempt({ word: target, matched, mode: 'mic', recognitionAttempted: true });
+
     if (matched) {
       showReward();
     } else {
@@ -362,9 +473,27 @@ function prevWord() {
 }
 
 againBtn.addEventListener('click', nextWord);
-rewardNowBtn.addEventListener('click', showReward);
+rewardNowBtn.addEventListener('click', () => {
+  const current = words[currentIndex];
+  if (current) {
+    logPracticeAttempt({ word: current.word, matched: true, mode: 'manual', recognitionAttempted: false });
+  }
+  showReward();
+});
 document.getElementById('nextWordBtn').addEventListener('click', nextWord);
 document.getElementById('prevBtn').addEventListener('click', prevWord);
+
+progressBtn.addEventListener('click', () => {
+  renderProgress();
+  wordScreen.classList.add('hidden');
+  rewardScreen.classList.add('hidden');
+  progressScreen.classList.remove('hidden');
+});
+
+closeProgressBtn.addEventListener('click', () => {
+  progressScreen.classList.add('hidden');
+  wordScreen.classList.remove('hidden');
+});
 
 applyWordsBtn.addEventListener('click', () => {
   words = parseWordList(wordListInput.value);

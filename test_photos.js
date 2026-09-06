@@ -44,6 +44,7 @@ const ids = [
   'rewardVideoWrap', 'againBtn', 'rewardNowBtn', 'wordListInput', 'applyWords',
   'youtubeUrlInput', 'applyVideo', 'photoInput', 'removePhotoBtn', 'nextWordBtn', 'prevBtn',
   'recordBtn', 'clearClipBtn', 'voiceClipStatus',
+  'progressBtn', 'closeProgressBtn', 'progressScreen', 'progressContent',
 ];
 const elements = {};
 ids.forEach(id => { elements[id] = makeEl(id); });

@@ -125,15 +125,60 @@ function stopListening() {
 }
 
 function speechErrorMessage(error) {
+  const onDeviceHint = onDeviceAvailable === false
+    ? ' On-device recognition was tried and is not available on this Chrome/OS, so this used the cloud service.'
+    : onDeviceAvailable === true
+      ? ' (This was already using on-device recognition, not the cloud — so this is not the usual cloud network error. Check the Mac microphone input device itself.)'
+      : '';
   const messages = {
-    'network': 'Mic error: network. Chrome sends speech recognition to a Google service; reload Chrome and retry, then check VPN/privacy extensions and microphone permission for localhost.',
-    'not-allowed': 'Mic blocked. Allow microphone access for localhost in Chrome settings, then reload.',
+    'network': `Mic error: network. Chrome sent speech recognition to a Google cloud service and it failed.${onDeviceHint} Try: reload Chrome and retry, disable VPN/privacy extensions, confirm microphone permission for this page in chrome://settings/content/microphone, and update Chrome (chrome://settings/help) — this error is also a known symptom of an out-of-date Chrome build.`,
+    'not-allowed': 'Mic blocked. Allow microphone access for this page in Chrome settings, then reload.',
     'service-not-allowed': 'Speech service blocked. Check Chrome speech/microphone permissions, VPN, and privacy extensions, then reload.',
     'audio-capture': 'No microphone found. Check the Mac input device and Chrome microphone permission.',
     'no-speech': 'Did not hear speech. Try again close to the mic.',
     'aborted': 'Listening stopped. Try again.'
   };
   return messages[error] || `Mic error: ${error}`;
+}
+
+// Chrome 139+ can run speech recognition fully on-device (no network round trip
+// to Google's cloud speech service at all), via SpeechRecognition.available()/
+// install() and the `processLocally` flag. This is brand new as of 2026 and,
+// per Chromium bug 444393111, has been reported broken on macOS in some
+// builds — so this is attempted opportunistically and silently falls back to
+// the existing cloud-based path (unchanged behavior) if it isn't available or
+// if it errors. This has NOT been verified against a real microphone/browser
+// in this environment; it is a best-effort layer on top of the existing fix.
+let onDeviceAvailable = null; // null = unknown/untested, true/false once checked
+const supportsOnDeviceCheck = Boolean(
+  SpeechRecognition && typeof SpeechRecognition.available === 'function'
+);
+
+async function tryEnableOnDevice(rec) {
+  if (!supportsOnDeviceCheck) {
+    onDeviceAvailable = false;
+    return;
+  }
+  try {
+    const result = await SpeechRecognition.available({ langs: ['en-US'], processLocally: true });
+    if (result === 'available') {
+      rec.processLocally = true;
+      onDeviceAvailable = true;
+    } else if (result === 'downloadable' || result === 'downloading') {
+      // Kick off the language pack download for next time, but don't block
+      // this attempt on it — use cloud recognition now.
+      SpeechRecognition.install({ langs: ['en-US'], processLocally: true }).catch(() => {});
+      rec.processLocally = false;
+      onDeviceAvailable = false;
+    } else {
+      rec.processLocally = false;
+      onDeviceAvailable = false;
+    }
+  } catch (e) {
+    // available()/processLocally not actually supported in this Chrome build
+    rec.processLocally = false;
+    onDeviceAvailable = false;
+  }
 }
 
 function createRecognition() {
@@ -175,12 +220,16 @@ if (SpeechRecognition) {
   micBtn.disabled = true;
 }
 
-micBtn.addEventListener('click', () => {
+micBtn.addEventListener('click', async () => {
   if (!SpeechRecognition || listening) return;
   recognition = createRecognition();
   listening = true;
   micBtn.classList.add('listening');
   statusEl.textContent = 'Listening...';
+
+  await tryEnableOnDevice(recognition);
+  if (!listening) return; // user may have re-clicked/aborted during the async check
+
   try {
     recognition.start();
   } catch (e) {

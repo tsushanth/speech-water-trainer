@@ -18,6 +18,14 @@ body {
 .hidden { display: none; }
 
 #picture { font-size: 12rem; }
+#picture img {
+  max-width: 80vw;
+  max-height: 40vh;
+  border-radius: 1.5rem;
+  object-fit: cover;
+}
+#photoControls { margin-top: 0.5rem; }
+.photoLabel { display: inline-block; }
 #word { font-size: 3rem; font-weight: bold; margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 0.1em; }
 
 button {

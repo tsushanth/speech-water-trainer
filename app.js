@@ -15,9 +15,49 @@ const wordListInput = document.getElementById('wordListInput');
 const applyWordsBtn = document.getElementById('applyWords');
 const youtubeUrlInput = document.getElementById('youtubeUrlInput');
 const applyVideoBtn = document.getElementById('applyVideo');
+const photoInput = document.getElementById('photoInput');
+const removePhotoBtn = document.getElementById('removePhotoBtn');
 
 let youtubeVideoId = '';
 let canUseSpeechRecognition = false;
+
+// Photos are stored in localStorage keyed by word text, as data URLs,
+// so real photos of the child's actual people/objects can replace the
+// generic emoji for any word. Falls back to the emoji when no photo is set.
+const PHOTO_STORAGE_KEY = 'wordPhotos';
+
+function loadPhotoMap() {
+  try {
+    const raw = localStorage.getItem(PHOTO_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function savePhotoMap(map) {
+  localStorage.setItem(PHOTO_STORAGE_KEY, JSON.stringify(map));
+}
+
+function getPhotoForWord(word) {
+  if (!word) return null;
+  const map = loadPhotoMap();
+  return map[word.toLowerCase()] || null;
+}
+
+function setPhotoForWord(word, dataUrl) {
+  if (!word) return;
+  const map = loadPhotoMap();
+  map[word.toLowerCase()] = dataUrl;
+  savePhotoMap(map);
+}
+
+function removePhotoForWord(word) {
+  if (!word) return;
+  const map = loadPhotoMap();
+  delete map[word.toLowerCase()];
+  savePhotoMap(map);
+}
 
 function extractYouTubeId(url) {
   const patterns = [
@@ -69,8 +109,21 @@ function loadWord(i) {
     return;
   }
   wordEl.textContent = w.word;
-  pictureEl.textContent = w.emoji;
+  renderPicture(w);
   statusEl.textContent = canUseSpeechRecognition ? '' : 'Speech recognition not supported — use Chrome, or use Reward manually.';
+}
+
+function renderPicture(w) {
+  const photo = getPhotoForWord(w.word);
+  if (photo) {
+    pictureEl.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = photo;
+    img.alt = w.word;
+    pictureEl.appendChild(img);
+  } else {
+    pictureEl.textContent = w.emoji;
+  }
 }
 
 function speakWord(word) {
@@ -227,6 +280,31 @@ applyWordsBtn.addEventListener('click', () => {
   words = parseWordList(wordListInput.value);
   currentIndex = 0;
   loadWord(0);
+});
+
+photoInput.addEventListener('change', () => {
+  const file = photoInput.files && photoInput.files[0];
+  const current = words[currentIndex];
+  if (!file || !current) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    setPhotoForWord(current.word, reader.result);
+    renderPicture(current);
+    statusEl.textContent = `Photo saved for "${current.word}".`;
+    photoInput.value = '';
+  };
+  reader.onerror = () => {
+    statusEl.textContent = 'Could not read that photo — try again.';
+  };
+  reader.readAsDataURL(file);
+});
+
+removePhotoBtn.addEventListener('click', () => {
+  const current = words[currentIndex];
+  if (!current) return;
+  removePhotoForWord(current.word);
+  renderPicture(current);
+  statusEl.textContent = `Photo removed for "${current.word}" — back to emoji.`;
 });
 
 // init

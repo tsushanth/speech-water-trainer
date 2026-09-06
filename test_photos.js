@@ -29,7 +29,7 @@ function makeEl(id) {
     innerHTML: '',
     className: '',
     classList: {
-      add() {}, remove() {}, contains() { return false; },
+      add() {}, remove() {}, contains() { return false; }, toggle() {},
     },
     files: [],
     disabled: false,
@@ -43,6 +43,7 @@ const ids = [
   'picture', 'word', 'hearBtn', 'micBtn', 'status', 'wordScreen', 'rewardScreen',
   'rewardVideoWrap', 'againBtn', 'rewardNowBtn', 'wordListInput', 'applyWords',
   'youtubeUrlInput', 'applyVideo', 'photoInput', 'removePhotoBtn', 'nextWordBtn', 'prevBtn',
+  'recordBtn', 'clearClipBtn', 'voiceClipStatus',
 ];
 const elements = {};
 ids.forEach(id => { elements[id] = makeEl(id); });
